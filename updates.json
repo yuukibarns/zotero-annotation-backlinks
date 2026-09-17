@@ -3,9 +3,9 @@
     "annotation-backlinks@local": {
       "updates": [
         {
-          "version": "0.2.0b2",
-          "update_link": "https://github.com/yuukibarns/zotero-annotation-backlinks/releases/download/v0.2.0-beta.2/annotation-backlinks-0.2.0-beta.2.xpi",
-          "update_hash": "sha256:9f2762ab3ba60461784cd7002ce76b44e0cd60e86e39d361fccd0aaa81e5d023",
+          "version": "0.2.0b3",
+          "update_link": "https://github.com/yuukibarns/zotero-annotation-backlinks/releases/download/v0.2.0-beta.3/annotation-backlinks-0.2.0-beta.3.xpi",
+          "update_hash": "sha256:e294c986c3b5779e64068e1d1a4ba85f5d693c934076aa21c507c4189071ede1",
           "applications": {
             "zotero": {
               "strict_min_version": "10.0",
