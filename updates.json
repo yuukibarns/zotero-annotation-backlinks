@@ -1,1 +1,19 @@
-{"addons":{"annotation-backlinks@local":{"updates":[]}}}
+{
+  "addons": {
+    "annotation-backlinks@local": {
+      "updates": [
+        {
+          "version": "0.2.0b1",
+          "update_link": "https://github.com/yuukibarns/zotero-annotation-backlinks/releases/download/v0.2.0-beta.1/annotation-backlinks-0.2.0-beta.1.xpi",
+          "update_hash": "sha256:9611a6e1eab6922ce7f81a676d8dcd1c0cc2561379cf79170b513f3df12ffee0",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "10.0",
+              "strict_max_version": "10.0.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
