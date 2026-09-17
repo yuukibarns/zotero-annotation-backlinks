@@ -38,7 +38,8 @@ startup = function(data, reason) {
       reader.toggleSidebar(true);
       const iframe=reader._iframeWindow;
       const preview=await wait(()=>iframe.document.querySelector(`[data-sidebar-annotation-id="${annotation.key}"] .preview`),'annotation sidebar');
-      async function invoke() {
+      async function invoke(count=2) {
+        win.focus(); await Zotero.Promise.delay(300);
         // Exercise React's actual contextmenu handler and Zotero's cross-compartment
         // customEvent bridge, then click the real HTML reader-menu button.
         preview.dispatchEvent(new iframe.MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2,clientX:80,clientY:160}));
@@ -46,19 +47,39 @@ startup = function(data, reason) {
         item.click();
         return wait(()=>{
           const p=win.document.getElementById('annotation-backlinks-results');
-          return p && p.querySelectorAll('article').length===2 ? p : null;
+          return p && p.parentElement.state==='open' && p.querySelectorAll('article').length===count ? p : null;
         },'matching results');
       }
       let panel=await invoke();
       assert(panel.querySelectorAll('article').length===2,'real reader menu; embedded/link matches; plain text and trash exclusions');
       const filter=panel.querySelector('input');filter.value='Matching note';filter.dispatchEvent(new win.Event('input'));
       assert(panel.querySelectorAll('article').length===1,'filtering');
-      panel.querySelector('article button').click();
-      await wait(()=>win.ZoteroPane.getSelectedItems().some(i=>i.id===expected.id),'note selection');
-      assert(true,'select matched note in library');
+      const bounds=panel.getBoundingClientRect();
+      assert(bounds.width<=401 && bounds.height<=361 && bounds.width>0,'compact popup bounds');
+      assert(panel.parentElement.localName==='panel','native XUL popup container');
+      const outer=panel.parentElement.getBoundingClientRect();
+      assert(outer.width<=401 && outer.height<=361,'native outer bounds');
+      for (const openInWindow of [false,true]) {
+        Zotero.Prefs.set('openNoteInNewWindow',openInWindow);
+        if(openInWindow) {await Zotero.Reader.open(attachment.id);panel=await invoke();const f=panel.querySelector('input');f.value='Matching note';f.dispatchEvent(new win.Event('input'));}
+        panel.querySelector('article button').click();
+        const mode=openInWindow?'window':'tab';
+        await wait(()=>Zotero.Notes._editorInstances.find(e=>e.itemID===expected.id && e.viewMode===mode),'native note editor '+mode);
+        await wait(()=>!panel.isConnected,'dismiss after opening '+mode);
+        assert(true,'direct note opening respects '+mode+' preference');
+        if(openInWindow) {
+          const windows=Services.wm.getEnumerator(null);
+          while(windows.hasMoreElements()) {const w=windows.getNext();if(w.name==='zotero-note-'+expected.id)w.close();}
+        }
+      }
+      await Zotero.Reader.open(attachment.id);
+      panel=await invoke();
       panel.dispatchEvent(new win.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
       assert(!panel.isConnected,'keyboard close');
-      await Zotero.Reader.open(attachment.id);
+      panel=await invoke();
+      panel.parentElement.hidePopup();
+      await wait(()=>!panel.isConnected,'native popup dismissal');
+      assert(true,'native popuphidden cleanup');
       panel=await invoke();
       assert(panel.isConnected,'reopen results');
       shutdown();shutdown();
@@ -68,6 +89,30 @@ startup = function(data, reason) {
       assert(listeners.length===1,'repeated startup registers one listener');
       panel=await invoke();
       assert(panel.querySelectorAll('article').length===2,'menu works after disable and reenable');
+      panel.parentElement.hidePopup();
+      for(let i=0;i<55;i++)await note(`<p>Extra synthetic note ${i}</p><span data-annotation="${meta}">Quote</span>`);
+      for(const theme of ['light','dark']) {
+        win.browsingContext.prefersColorSchemeOverride=theme;
+        await Zotero.Promise.delay(200);
+        panel=await invoke(50);
+        const list=panel.querySelector('#annotation-backlinks-list');
+        assert(list.scrollHeight>list.clientHeight,'scrollable bounded results '+theme);
+        assert(panel.parentElement.getBoundingClientRect().height<=361,'height bound '+theme);
+        assert(win.matchMedia('(prefers-color-scheme: dark)').matches===(theme==='dark'),'native theme '+theme);
+        list.scrollTop=list.scrollHeight;assert(list.scrollTop>0,'scroll navigation '+theme);
+        list.scrollTop=0;
+        if(testConfig.desktop) {
+          await IOUtils.writeUTF8(PathUtils.join(testConfig.root,'visual-phase'),theme);
+          await Zotero.Promise.delay(100);
+        }
+        const next=[...panel.querySelectorAll('button')].find(b=>b.textContent==='Next');next.click();
+        assert(panel.querySelectorAll('article').length===7,'second results page '+theme+' (rows='+panel.querySelectorAll('article').length+',connected='+panel.isConnected+')');
+        // Exercise an outside document click; native rollup also handles clicks in other windows.
+        win.document.documentElement.dispatchEvent(new win.MouseEvent('mousedown',{bubbles:true}));
+        await wait(()=>!panel.isConnected,'outside click dismissal '+theme);
+        assert(true,'outside click dismissal '+theme);
+      }
+      win.browsingContext.prefersColorSchemeOverride='none';
       shutdown();
       await IOUtils.writeUTF8(PathUtils.join(testConfig.root,'result.json'),JSON.stringify({nonce:testConfig.nonce,passed:true,zoteroVersion:Zotero.version,desktop:testConfig.desktop,checks}));
     } catch(e) {

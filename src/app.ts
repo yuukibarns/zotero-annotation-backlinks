@@ -19,7 +19,7 @@ export class App {
         this.pending.get(timer)?.detach(); this.pending.delete(timer);
         if (!this.active) return;
         try {
-          this.panel?.dispose();
+          this.panel?.dispose(false);
           this.panel = new ResultsPanel(host, this.platform.source, attachmentID, keys,
             () => { this.panel = undefined; }, e => this.platform.report(e));
         } catch (error) { this.platform.report(error); }
@@ -36,6 +36,6 @@ export class App {
     if (!this.active) return;
     this.active = false; this.platform.unregister(this.listener);
     for (const [id, {host, detach}] of this.pending) { host.cancelDeferred(id); detach(); }
-    this.pending.clear(); this.panel?.dispose(); this.panel = undefined;
+    this.pending.clear(); this.panel?.dispose(false); this.panel = undefined;
   }
 }

@@ -11,7 +11,7 @@ Find the saved Zotero notes that reference a selected annotation—even when the
 3. Select the XPI. This upgrades earlier Annotation Backlinks versions using the same plugin ID.
 4. Right-click an annotation in the PDF reader or its annotation sidebar and choose **Find Referencing Notes**.
 
-Results appear inside the main Zotero window. Filter by note, source, or library; use Previous/Next for larger result sets. **Show note in library** selects a result without opening a separate native window. Escape or Close dismisses the panel. Select several sidebar annotations to find notes referencing any of them.
+Results appear in a compact native Zotero popup (400 px wide, up to 360 px tall). Filter by note, source, or library; use Previous/Next for larger result sets. **Click a note row to open its native editor**, respecting your Zotero preference for notes in tabs or windows. Escape, Close, or clicking outside dismisses the popup. Select several sidebar annotations to find notes referencing any of them.
 
 ## How matching works
 
@@ -30,7 +30,7 @@ Only **saved Zotero notes** are searched. Unsaved edits, external Markdown/Obsid
 
 Searches are refreshed on demand, not continuously synchronized. Notes changed mid-search may require Refresh. Results open the containing note, not a specific occurrence. EPUB/snapshot annotation links are recognized, but the end-to-end reader tests focus on PDFs.
 
-Version 0.1.0 was followed by a native crash when opening its custom results window on the original Linux desktop. The precise native cause was not established. The separate window was removed in 0.1.1; this beta retains an in-window panel and adds actual reader-menu tests. This is **not** certification for Windows or macOS. See [VALIDATION.md](VALIDATION.md).
+Version 0.1.0 was followed by a native crash when opening its custom results window on the original Linux desktop. The precise native cause was not established. The separate window was removed in 0.1.1; beta 1 used an in-window panel; beta 2 uses a native popup in the existing window and Zotero’s own note-opening API. Actual reader-menu tests cover these paths. This is **not** certification for Windows or macOS. See [VALIDATION.md](VALIDATION.md).
 
 ## Development
 
@@ -46,7 +46,7 @@ npm run test:zotero:desktop # Separate visible Zotero test window
 
 Set `ZOTERO_BIN` to your Zotero launcher if it is not `/usr/lib/zotero/zotero`. The integration runner uses fresh temporary profile/data directories, verifies a random marker before creating fixtures, times out, and cleans up its own process group. Logs stay in the reported temporary directory; concise reports go to ignored `.test-output/`.
 
-The release XPI contains only `manifest.json` and the compiled `bootstrap.js`. Its ZIP metadata is fixed for reproducible builds. The npm/release version `0.2.0-beta.1` maps to Mozilla-compatible plugin version `0.2.0b1`.
+The release XPI contains only `manifest.json` and the compiled `bootstrap.js`. Its ZIP metadata is fixed for reproducible builds. The npm/release version `0.2.0-beta.2` maps to Mozilla-compatible plugin version `0.2.0b2`.
 
 ## Troubleshooting
 

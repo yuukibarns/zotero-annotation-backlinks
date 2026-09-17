@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0-beta.2
+
+- Replace the large custom panel with a native Zotero popup, 400 px wide and at most 360 px tall.
+- Open note editors directly from compact result rows, respecting Zotero’s tab/window preference.
+- Reuse native popup theming and dismissal; preserve focus during note opening and outside clicks.
+- Retain filtering, refresh, bounded pagination, cancellation, and error reporting.
+- Extend native-popup lifecycle, direct-opening, scrolling, theme, and isolated desktop tests.
+
 ## 0.2.0-beta.1
 
 - Refactor to TypeScript modules, typed Zotero adapter, and a reproducible esbuild/XPI pipeline.

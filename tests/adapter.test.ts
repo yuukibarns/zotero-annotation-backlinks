@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { describe,it,expect,vi } from 'vitest';
-import { BATCH_SQL,LIVE_NOTES,createPlatform,type ZoteroAPI,type ZoteroItem } from '../src/adapter';
+import { BATCH_SQL,LIVE_NOTES,createPlatform,type ZoteroAPI,type ZoteroItem,type ZoteroWindow } from '../src/adapter';
 function item(id=1):ZoteroItem {return {id,key:'ATTACH01',libraryID:1,parentID:false,deleted:false,isAttachment:()=>true,isNote:()=>true,isAnnotation:()=>false,getField:()=>'',getNoteTitle:()=>''};}
 function api():ZoteroAPI {return {
  Reader:{registerEventListener:vi.fn(),unregisterEventListener:vi.fn()},
@@ -26,5 +26,42 @@ q=json.loads(sys.argv[1]);print(json.dumps([dict(r) for r in c.execute(q,[0,5,'%
  it('rejects attachments under trashed parent items',async()=>{const z=api();vi.mocked(z.Items.getAsync).mockResolvedValueOnce({...item(),parentID:2}).mockResolvedValueOnce({...item(2),deleted:true});await expect(createPlatform(z,'id').source.target(1,[])).rejects.toThrow('trash');});
  it('returns null for a note deleted since the batch query',async()=>{const z=api();expect(await createPlatform(z,'id').source.note(1)).toBeNull();expect(z.Items.getAsync).not.toHaveBeenCalled();expect(z.DB.queryAsync).toHaveBeenCalledWith(`SELECT n.itemID AS id ${LIVE_NOTES} AND n.itemID=?`,[1]);});
  it('handles an unavailable main window',()=>{const p=createPlatform(api(),'id');expect(p.host()).toBeNull();expect(()=>p.source.parse('<p>x</p>')).toThrow('closed');});
+ it('opens notes without overriding the native preference or refocusing the main window',async()=>{
+  const z=api(),openNote=vi.fn(async()=>{}),focus=vi.fn();
+  z.getMainWindow=()=>({closed:false,document,ZoteroPane:{openNote},focus}) as unknown as ZoteroWindow;
+  vi.mocked(z.DB.queryAsync).mockResolvedValue([{id:7}]);
+  await createPlatform(z,'id').host()!.openNote(7);
+  expect(openNote).toHaveBeenCalledWith(7);expect(focus).not.toHaveBeenCalled();
+ });
+ it('rejects opening a deleted note and propagates native opening failures',async()=>{
+  const z=api(),openNote=vi.fn(async()=>{throw new Error('Editor failed');});
+  z.getMainWindow=()=>({closed:false,document,ZoteroPane:{openNote}}) as unknown as ZoteroWindow;
+  const host=createPlatform(z,'id').host()!;
+  await expect(host.openNote(7)).rejects.toThrow('deleted');expect(openNote).not.toHaveBeenCalled();
+  vi.mocked(z.DB.queryAsync).mockResolvedValue([{id:7}]);await expect(host.openNote(7)).rejects.toThrow('Editor failed');
+ });
+ it('native popup handles dismissal and removes document listeners on destroy',()=>{
+  const z=api(),hide=vi.fn();
+  let popup!: Element;
+  const doc=document as Document & {createXULElement?: (tag:string)=>Element};
+  doc.createXULElement=()=>{
+    popup=document.createElement('div');
+    return Object.assign(popup,{
+      openPopup:()=>popup.dispatchEvent(new Event('popupshown')),
+      hidePopup:()=>{hide();popup.dispatchEvent(new Event('popuphidden'));}
+    });
+  };
+  z.getMainWindow=()=>({document:doc,innerWidth:900,closed:false,KeyboardEvent}) as unknown as ZoteroWindow;
+  const content=document.createElement('section'),hidden=vi.fn(),shown=vi.fn(),escape=vi.fn();
+  content.addEventListener('keydown',escape);
+  const native=createPlatform(z,'id').host()!.createPopup(content,hidden,shown);native.show();
+  expect(shown).toHaveBeenCalledOnce();
+  content.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));expect(hide).not.toHaveBeenCalled();
+  document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));expect(escape).toHaveBeenCalledOnce();
+  document.body.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));expect(hidden).toHaveBeenCalledOnce();
+  native.destroy();expect(popup.isConnected).toBe(false);expect(hidden).toHaveBeenCalledOnce();
+  document.body.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));expect(hide).toHaveBeenCalledTimes(2);
+  delete doc.createXULElement;
+ });
  it('registers and removes the same reader listener',()=>{const z=api(),p=createPlatform(z,'id'),fn=vi.fn();p.register(fn);p.unregister(fn);expect(z.Reader.registerEventListener).toHaveBeenCalledWith('createAnnotationContextMenu',fn,'id');expect(z.Reader.unregisterEventListener).toHaveBeenCalledWith('createAnnotationContextMenu',fn);});
 });

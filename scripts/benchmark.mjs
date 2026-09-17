@@ -33,7 +33,7 @@ for(const size of [1000,10000]) {
 const {source,stats}=sourceFor(10000),token=new Cancellation();source.yield=async()=>token.cancel();
 try {await search(source,1,['ANNOT001'],token);throw Error('Cancellation failed');}catch(e){if(!(e instanceof Cancelled))throw e;}
 if(stats().batches!==1)throw Error('Read beyond cancellation');
-const {source:uiSource}=sourceFor(1000);const host={document:dom.window.document,focus(){},selectNote:async()=>{},defer:fn=>setTimeout(fn,0),cancelDeferred:clearTimeout,onClose:()=>()=>{}};
+const {source:uiSource}=sourceFor(1000);const host={document:dom.window.document,focus(){},createPopup(content){return {show(){dom.window.document.body.append(content);},destroy(){content.remove();}};},openNote:async()=>{},defer:fn=>setTimeout(fn,0),cancelDeferred:clearTimeout,onClose:()=>()=>{}};
 const panel=new ResultsPanel(host,uiSource,1,['ANNOT001'],()=>{},e=>{throw e;});
 const deadline=performance.now()+30000;
 while(!panel.root.querySelector('[role=status]').textContent.includes('referencing notes')) {

@@ -21,7 +21,8 @@ export interface SearchSource {
 export interface Host {
   document: Document;
   focus(): void;
-  selectNote(id: number): Promise<void>;
+  openNote(id: number): Promise<void>;
+  createPopup(content: HTMLElement, hidden: () => void, shown: () => void): { show(): void; destroy(): void };
   defer(fn: () => void): number;
   cancelDeferred(id: number): void;
   onClose(fn: () => void): () => void;

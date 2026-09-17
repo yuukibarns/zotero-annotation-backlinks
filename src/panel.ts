@@ -18,6 +18,8 @@ export class ResultsPanel {
   private next: HTMLButtonElement;
   private refresh: HTMLButtonElement;
   private refreshing = false;
+  private popup?: ReturnType<Host['createPopup']>;
+  private pageBar: HTMLElement;
   constructor(private host: Host, private source: SearchSource, private attachmentID: number,
     private keys: string[], private closed: () => void, private report: (e: unknown) => void) {
     this.priorFocus = host.document.activeElement;
@@ -25,30 +27,37 @@ export class ResultsPanel {
     this.root.id = 'annotation-backlinks-results';
     this.root.setAttribute('role', 'region');
     this.root.setAttribute('aria-label', 'Referencing notes');
-    this.root.style.cssText = 'position:fixed;top:70px;right:24px;width:min(650px,calc(100vw - 48px));max-height:75vh;overflow:auto;z-index:2147483647;box-sizing:border-box;padding:20px;background:Canvas;color:CanvasText;border:1px solid GrayText;border-radius:10px;box-shadow:0 8px 28px #0004;font:14px system-ui;';
-    const title = this.el('h2', 'Referencing notes'); title.style.cssText = 'font-size:20px;margin:0 0 12px';
+    this.root.style.cssText = 'display:flex;flex-direction:column;box-sizing:border-box;width:min(390px,calc(100vw - 32px));max-height:min(350px,calc(100vh - 100px));padding:8px;gap:6px;color:inherit;font:inherit;';
+    const title = this.el('strong', 'Referencing notes');
     this.status = this.el('p', 'Searching saved notes…'); this.status.setAttribute('role', 'status');
     this.status.setAttribute('aria-live', 'polite');
     this.filter = this.el('input') as HTMLInputElement;
     this.filter.type = 'search'; this.filter.placeholder = 'Filter by note, source, or library';
     this.filter.setAttribute('aria-label', 'Filter referencing notes');
-    this.filter.style.cssText = 'box-sizing:border-box;width:100%;padding:8px;margin:12px 0';
+    this.filter.style.cssText = 'box-sizing:border-box;width:100%;min-height:24px';
     this.list = this.el('div'); this.list.id = 'annotation-backlinks-list';
+    this.list.style.cssText = 'overflow:auto;min-height:0;flex:1';
+    this.status.style.cssText = 'margin:0;font-size:0.9em';
     this.pagination = this.el('span');
     this.previous = this.button('Previous', () => { this.page--; this.render(); });
     this.next = this.button('Next', () => { this.page++; this.render(); });
     this.refresh = this.button('Refresh', () => this.start());
-    this.root.append(title, this.button('Close', () => this.dispose()), this.refresh, this.status, this.filter,
-      this.list, this.previous, this.pagination, this.next,
-      this.el('p', 'Saved notes only. Plain-text copies, unlinked quotations, and external files cannot be traced.'));
+    const toolbar = this.el('div'); toolbar.style.cssText = 'display:flex;align-items:center;gap:6px';
+    title.style.flex = '1';
+    toolbar.append(title, this.refresh, this.button('Close', () => this.dispose()));
+    this.pageBar = this.el('div');
+    this.pageBar.append(this.previous, this.pagination, this.next); this.pageBar.hidden = true;
+    this.root.append(toolbar, this.filter, this.status, this.list, this.pageBar);
     this.listen(this.filter, 'input', () => { this.page = 0; this.render(); });
     this.listen(this.root, 'keydown', event => {
       if ((event as KeyboardEvent).key === 'Escape') { event.stopPropagation(); this.dispose(); }
     });
-    host.document.documentElement.append(this.root);
-    this.detachClose = host.onClose(() => this.dispose(false));
-    host.focus(); this.filter.focus();
-    this.start();
+    try {
+      this.popup = host.createPopup(this.root, () => this.dispose(false), () => this.filter.focus());
+      this.detachClose = host.onClose(() => this.dispose(false));
+      host.focus(); this.popup.show();
+      this.start();
+    } catch (error) { this.dispose(false); throw error; }
   }
   private el(tag: string, text = ''): HTMLElement {
     const node = this.host.document.createElementNS('http://www.w3.org/1999/xhtml', tag) as HTMLElement;
@@ -59,7 +68,7 @@ export class ResultsPanel {
   }
   private button(text: string, action: () => void | Promise<void>): HTMLButtonElement {
     const b = this.el('button', text) as HTMLButtonElement;
-    b.type = 'button'; b.style.cssText = 'padding:6px 10px;margin:0 8px 4px 0';
+    b.type = 'button';
     // Buttons in result pages are discarded with their DOM nodes, not retained in cleanup.
     b.addEventListener('click', () => {
       if (this.disposed) return;
@@ -88,15 +97,21 @@ export class ResultsPanel {
     this.page = Math.max(0, Math.min(pages - 1, this.page));
     if (!this.refreshing) this.status.textContent = `${visible.length} of ${this.matches.length} referencing notes · ${this.keys.length} selected annotation(s)`;
     this.previous.disabled = this.page === 0; this.next.disabled = this.page >= pages - 1;
+    this.pageBar.hidden = pages <= 1;
     this.pagination.textContent = ` Page ${this.page + 1} of ${pages} `;
     this.list.replaceChildren();
     if (!visible.length) this.list.append(this.el('p', this.matches.length ? 'No notes match this filter.' : 'No saved notes reference the selected annotation(s).'));
     for (const match of visible.slice(this.page * PAGE_SIZE, (this.page + 1) * PAGE_SIZE)) {
-      const card = this.el('article'); card.style.cssText = 'padding:12px 0;border-top:1px solid GrayText';
-      const heading = this.el('h3', match.title); heading.style.cssText = 'font-size:15px;margin:0 0 6px;overflow-wrap:anywhere';
-      card.append(heading, this.el('p', `${match.library} · ${match.parent}`));
-      if (this.keys.length > 1) card.append(this.el('p', `References ${match.annotationKeys.length} selected annotation(s)`));
-      card.append(this.button('Show note in library', () => this.host.selectNote(match.id)));
+      const card = this.el('article');
+      const row = this.button('', async () => { await this.host.openNote(match.id); this.dispose(false); });
+      row.style.cssText = 'display:block;width:100%;text-align:start;margin:0;padding:5px 6px;';
+      row.setAttribute('aria-label', `Open note: ${match.title}`);
+      const heading = this.el('span', match.title);
+      heading.style.cssText = 'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      const detail = this.el('small', `${match.library} · ${match.parent}`);
+      detail.style.cssText = 'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.75';
+      row.title = `${match.title}\n${match.library} · ${match.parent}`;
+      row.append(heading, detail); card.append(row);
       this.list.append(card);
     }
   }
@@ -104,7 +119,7 @@ export class ResultsPanel {
     if (this.disposed) return;
     this.disposed = true; this.coordinator.cancel(); this.detachClose();
     this.cleanup.forEach(fn => fn()); this.cleanup = [];
-    this.root.remove(); this.matches = [];
+    this.popup?.destroy(); this.root.remove(); this.matches = [];
     if (restoreFocus && this.priorFocus?.isConnected && 'focus' in this.priorFocus) (this.priorFocus as HTMLElement).focus();
     this.priorFocus = null; this.closed();
   }

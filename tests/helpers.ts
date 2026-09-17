@@ -17,7 +17,8 @@ export function sourceWith(rows: NoteRow[] = []): SearchSource {
 }
 export function makeHost(): Host & {close(): void; listeners: Set<() => void>} {
   const listeners = new Set<() => void>();
-  return {document,focus:vi.fn(),selectNote:vi.fn(async () => {}),
+  return {document,focus:vi.fn(),openNote:vi.fn(async () => {}),
+    createPopup: (content, hidden, shown) => ({show(){document.body.append(content);content.addEventListener('popuphidden', hidden);shown();},destroy(){content.removeEventListener('popuphidden', hidden);content.remove();}}),
     defer: fn => window.setTimeout(fn,0),cancelDeferred:id => window.clearTimeout(id),
     onClose: fn => {listeners.add(fn); return () => {listeners.delete(fn);};},
     listeners,close:() => {for(const fn of [...listeners])fn();}}

@@ -6,7 +6,8 @@ export interface ZoteroItem {
 }
 export interface ZoteroWindow extends Window {
  DOMParser: typeof DOMParser;
- ZoteroPane: { selectItem(id: number): Promise<unknown> };
+ KeyboardEvent: typeof KeyboardEvent;
+ ZoteroPane: { openNote(id: number): Promise<unknown> };
 }
 export interface ZoteroAPI {
  Reader: {registerEventListener(type: string, fn: (e: ReaderMenu) => void, id: string): void;
@@ -73,10 +74,51 @@ export function createPlatform(z: ZoteroAPI, pluginID: string): Platform {
       const win = z.getMainWindow();
       if (!win || win.closed) return null;
       return {document: win.document, focus: () => win.focus(),
-        async selectNote(id) {
+        async openNote(id) {
           if (win.closed) throw new Error('The Zotero window was closed.');
           if (!await liveNote(id)) throw new Error('This note was deleted or moved to the trash. Refresh the results.');
-          await win.ZoteroPane.selectItem(id); win.focus();
+          await win.ZoteroPane.openNote(id);
+        },
+        createPopup(content, hidden, shown) {
+          const doc = win.document as Document & { createXULElement(tag: string): Element };
+          const popup = doc.createXULElement('panel') as Element & {
+            openPopup(anchor: Element | null, position: string, x: number, y: number, context: boolean): void;
+            hidePopup(): void;
+          };
+          popup.setAttribute('type', 'arrow');
+          popup.classList.add('panel-no-padding');
+          popup.setAttribute('style', 'max-width:min(400px,calc(100vw - 16px));max-height:min(360px,calc(100vh - 80px))');
+          popup.setAttribute('noautofocus', 'false');
+          popup.append(content);
+          const onHidden = (event: Event) => { if (event.target === popup) hidden(); };
+          const onShown = (event: Event) => { if (event.target === popup) shown(); };
+          popup.addEventListener('popuphidden', onHidden);
+          popup.addEventListener('popupshown', onShown);
+          // Capture before the native panel consumes Escape; explicit dismissal restores focus.
+          const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && event.target !== content) {
+              event.preventDefault(); event.stopImmediatePropagation();
+              content.dispatchEvent(new win.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+            }
+          };
+          const onOutside = (event: MouseEvent) => {
+            if (!event.composedPath().includes(popup)) popup.hidePopup();
+          };
+          doc.documentElement.append(popup);
+          return {
+            show() {
+              doc.addEventListener('keydown', onKey, true);
+              doc.addEventListener('mousedown', onOutside, true);
+              popup.openPopup(null, 'after_start', Math.max(8, win.innerWidth - 424), 70, false);
+            },
+            destroy() {
+              doc.removeEventListener('keydown', onKey, true);
+              doc.removeEventListener('mousedown', onOutside, true);
+              popup.removeEventListener('popuphidden', onHidden);
+              popup.removeEventListener('popupshown', onShown);
+              popup.hidePopup(); popup.remove();
+            }
+          };
         },
         defer: fn => win.setTimeout(fn, 0), cancelDeferred: id => win.clearTimeout(id),
         onClose(fn) { win.addEventListener('unload', fn); return () => win.removeEventListener('unload', fn); }
