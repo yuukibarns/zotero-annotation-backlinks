@@ -1,4 +1,4 @@
-import { matchReferences } from './matcher';
+import { matchEvidence } from './matcher';
 import type { Match, Progress, SearchSource } from './types';
 export class Cancelled extends Error { constructor() { super('Search cancelled'); } }
 export class Cancellation {
@@ -27,11 +27,11 @@ export async function search(source: SearchSource, attachmentID: number, keys: s
     }
     for (const row of rows) {
       token.check();
-      const annotationKeys = matchReferences(source.parse(row.html), target, source.resolver);
-      if (annotationKeys.length) {
+      const evidence = matchEvidence(source.parse(row.html), target, source.resolver);
+      if (evidence.annotationKeys.length || evidence.possibleAnnotationKeys.length) {
         const note = await source.note(row.id);
         token.check();
-        if (note) results.push({...note, annotationKeys});
+        if (note) results.push({...note, ...evidence});
       }
       scanned++;
     }
@@ -41,7 +41,7 @@ export async function search(source: SearchSource, attachmentID: number, keys: s
     await source.yield();
     token.check();
   }
-  return results.sort((a, b) => a.title.localeCompare(b.title) || a.id - b.id);
+  return results.sort((a, b) => Number(!a.annotationKeys.length) - Number(!b.annotationKeys.length) || a.title.localeCompare(b.title) || a.id - b.id);
 }
 export class SearchCoordinator {
   private current?: Cancellation;

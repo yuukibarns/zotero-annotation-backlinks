@@ -111,7 +111,14 @@ export class ResultsPanel {
       const detail = this.el('small', `${match.library} · ${match.parent}`);
       detail.style.cssText = 'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.75';
       row.title = `${match.title}\n${match.library} · ${match.parent}`;
-      row.append(heading, detail); card.append(row);
+      row.append(heading, detail);
+      if (match.possibleAnnotationKeys?.length) {
+        const label = match.annotationKeys.length ? 'Exact backlink + possible match' : 'Possible match';
+        const evidence = this.el('small', label); evidence.style.display = 'block';
+        evidence.title = 'Same source, page, and nearby comment text; the note has no matching annotation identifier.';
+        row.append(evidence); row.setAttribute('aria-label', `Open note: ${match.title} (${label})`);
+      }
+      card.append(row);
       this.list.append(card);
     }
   }

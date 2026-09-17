@@ -1,8 +1,9 @@
 export interface Identity { libraryID: number; key: string }
-export interface Target { attachment: Identity; annotationKeys: ReadonlySet<string> }
+export interface CitationHint { annotationKey: string; source: Identity; page: string; comment: string }
+export interface Target { attachment: Identity; annotationKeys: ReadonlySet<string>; citationHints?: CitationHint[] }
 export interface NoteRow { id: number; html: string }
 export interface NoteInfo { id: number; title: string; parent: string; library: string }
-export interface Match extends NoteInfo { annotationKeys: string[] }
+export interface Match extends NoteInfo { annotationKeys: string[]; possibleAnnotationKeys?: string[] }
 export interface Progress { scanned: number; matched: number }
 export interface ReferenceResolver {
   attachment(uri: string): Identity | null;

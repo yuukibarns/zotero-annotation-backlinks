@@ -33,3 +33,57 @@ export function matchReferences(doc: Document, target: Target, resolver: Referen
   }
   return [...found];
 }
+
+function normalized(value: string): string {
+  return value.normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim();
+}
+
+/** Citation-only matches are evidence, never an exact annotation backlink. */
+export function matchEvidence(doc: Document, target: Target, resolver: ReferenceResolver): {
+  annotationKeys: string[]; possibleAnnotationKeys: string[];
+} {
+  const annotationKeys = matchReferences(doc, target, resolver);
+  const possible = new Set<string>();
+  if (!target.citationHints?.length) return {annotationKeys, possibleAnnotationKeys: []};
+  for (const citation of doc.querySelectorAll('[data-citation]')) {
+    try {
+      const raw = citation.getAttribute('data-citation') || '';
+      let data;
+      try { data = JSON.parse(decodeURIComponent(raw)); } catch { data = JSON.parse(raw); }
+      if (!Array.isArray(data?.citationItems)) continue;
+      // Only the text following this citation in its own paragraph belongs to it.
+      const block = citation.closest('p,li,blockquote') || citation.parentElement;
+      if (!block) continue;
+      const citations = [...block.querySelectorAll('[data-citation]')];
+      const next = citations[citations.indexOf(citation) + 1];
+      const range = doc.createRange(); range.setStartAfter(citation);
+      if (next) range.setEndBefore(next); else range.setEnd(block, block.childNodes.length);
+      const fragment = range.cloneContents();
+      fragment.querySelectorAll('[data-annotation], [data-citation], script, style').forEach(n => n.remove());
+      const text = normalized(fragment.textContent || '');
+      for (const hint of target.citationHints) {
+        if (!target.annotationKeys.has(hint.annotationKey) || annotationKeys.includes(hint.annotationKey)) continue;
+        const comment = normalized(hint.comment);
+        if (!comment || !text) continue;
+        // Match a full phrase, not a substring of another word (cache != caches).
+        let found = false, from = 0;
+        while (from <= text.length) {
+          const at = text.indexOf(comment, from); if (at < 0) break;
+          const before = text.slice(0, at).match(/[\p{L}\p{N}]$/u);
+          const after = /^[\p{L}\p{N}]/u.test(text.slice(at + comment.length));
+          if (!before && !after) { found = true; break; }
+          from = at + 1;
+        }
+        if (!found) continue;
+        for (const item of data.citationItems) {
+          if (!item || typeof item.locator !== 'string' || normalized(item.locator) !== normalized(hint.page)
+            || !Array.isArray(item.uris) || (item.label && item.label !== 'page')) continue;
+          if (item.uris.some((uri: unknown) => typeof uri === 'string' && same(resolver.attachment(uri), hint.source))) {
+            possible.add(hint.annotationKey); break;
+          }
+        }
+      }
+    } catch { /* Malformed citations must not hide other valid matches. */ }
+  }
+  return {annotationKeys, possibleAnnotationKeys: [...possible]};
+}

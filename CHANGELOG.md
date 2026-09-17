@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0-beta.3
+
+- Find citation-only notes for text boxes and sticky-note comments using source, page label, and nearby comment text.
+- Label inferred results as Possible match; retain exact backlink priority and note deduplication.
+- Include citation HTML in bounded read-only searches; never modify notes or add identifiers.
+- Test source/page/text boundaries and Zotero's actual text-annotation note insertion and reader-menu workflow.
+
 ## 0.2.0-beta.2
 
 - Replace the large custom panel with a native Zotero popup, 400 px wide and at most 360 px tall.

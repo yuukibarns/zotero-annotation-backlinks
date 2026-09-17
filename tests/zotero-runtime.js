@@ -113,6 +113,22 @@ startup = function(data, reason) {
         assert(true,'outside click dismissal '+theme);
       }
       win.browsingContext.prefersColorSchemeOverride='none';
+      const textAnnotation=new Zotero.Item('annotation');textAnnotation.libraryID=attachment.libraryID;textAnnotation.parentID=attachment.id;
+      textAnnotation.annotationType='text';textAnnotation.annotationComment='KV cache';textAnnotation.annotationColor='#ffd400';
+      textAnnotation.annotationPageLabel='385';textAnnotation.annotationSortIndex='00000|000000|00001';
+      textAnnotation.annotationPosition=JSON.stringify({pageIndex:0,rects:[[50,600,150,630]],rotation:0,fontSize:12});await textAnnotation.saveTx();
+      const citationNote=await Zotero.EditorInstance.createNoteFromAnnotations([textAnnotation],{parentID:parent.id,noHeader:true});
+      assert(!citationNote.getNote().includes('data-annotation='),'native text annotation insertion omits annotation identifier');
+      const textPreview=await wait(()=>iframe.document.querySelector(`[data-sidebar-annotation-id="${textAnnotation.key}"] .preview`),'text annotation sidebar');
+      win.focus();await Zotero.Promise.delay(300);
+      textPreview.dispatchEvent(new iframe.MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2,clientX:80,clientY:160}));
+      const textMenu=await wait(()=>[...iframe.document.querySelectorAll('.context-menu button')].find(b=>b.textContent==='Find Referencing Notes'),'text annotation menu');textMenu.click();
+      panel=await wait(()=>{const p=win.document.getElementById('annotation-backlinks-results');return p?.textContent.includes('Possible match')?p:null;},'citation fallback');
+      assert(panel.querySelectorAll('article').length===1,'native citation-only note found as possible match');
+      Zotero.Prefs.set('openNoteInNewWindow',false);panel.querySelector('article button').click();
+      await wait(()=>Zotero.Notes._editorInstances.find(e=>e.itemID===citationNote.id && e.viewMode==='tab'),'open citation-only note');
+      assert(true,'possible match opens correct note');
+
       shutdown();
       await IOUtils.writeUTF8(PathUtils.join(testConfig.root,'result.json'),JSON.stringify({nonce:testConfig.nonce,passed:true,zoteroVersion:Zotero.version,desktop:testConfig.desktop,checks}));
     } catch(e) {

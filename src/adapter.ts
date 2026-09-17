@@ -1,6 +1,7 @@
-import type { Host, Identity, NoteInfo, NoteRow, Platform, ReaderMenu, SearchSource } from './types';
+import type { CitationHint, Host, Identity, NoteInfo, NoteRow, Platform, ReaderMenu, SearchSource } from './types';
 export interface ZoteroItem {
  id: number; key: string; libraryID: number; parentID: number | false; deleted: boolean;
+ annotationType?: string; annotationComment?: string; annotationPageLabel?: string;
  isAttachment(): boolean; isNote(): boolean; isAnnotation(): boolean;
  getField(field: string): string; getNoteTitle(): string;
 }
@@ -13,7 +14,7 @@ export interface ZoteroAPI {
  Reader: {registerEventListener(type: string, fn: (e: ReaderMenu) => void, id: string): void;
  unregisterEventListener(type: string, fn: (e: ReaderMenu) => void): void};
  DB: {queryAsync<T>(sql: string, params?: (number | string)[]): Promise<T[]>};
- Items: { getAsync(id: number): Promise<ZoteroItem | false>; exists(id: number): boolean };
+ Items: { getAsync(id: number): Promise<ZoteroItem | false>; exists(id: number): boolean; getByLibraryAndKey(libraryID: number, key: string): ZoteroItem | false };
  URI: {getURIItemLibraryKey(uri: string): Identity | false};
  Libraries: {userLibraryID: number; get(id: number): {name: string} | false};
  Groups: {getLibraryIDFromGroupID(id: number): number | false};
@@ -25,7 +26,7 @@ export const LIVE_NOTES = `FROM itemNotes n
  WHERE NOT EXISTS (SELECT 1 FROM deletedItems d WHERE d.itemID=n.itemID)
  AND NOT EXISTS (SELECT 1 FROM deletedItems d WHERE d.itemID=n.parentItemID)`;
 export const BATCH_SQL = `SELECT n.itemID AS id, n.note AS html ${LIVE_NOTES}
- AND n.itemID > ? AND n.itemID <= ? AND (n.note LIKE ? OR n.note LIKE ?)
+ AND n.itemID > ? AND n.itemID <= ? AND (n.note LIKE ? OR n.note LIKE ? OR n.note LIKE ?)
  ORDER BY n.itemID LIMIT ?`;
 export function createPlatform(z: ZoteroAPI, pluginID: string): Platform {
   const liveNote = async (id: number): Promise<boolean> => (await z.DB.queryAsync<{id: number}>(
@@ -35,17 +36,26 @@ export function createPlatform(z: ZoteroAPI, pluginID: string): Platform {
       if (!z.Items.exists(id)) throw new Error('The source attachment is no longer available.');
       const item = await z.Items.getAsync(id);
       if (!item || item.deleted || !item.isAttachment()) throw new Error('The source attachment is no longer available.');
+      const citationHints: CitationHint[] = [];
       if (item.parentID) {
         const parent = await z.Items.getAsync(item.parentID);
         if (!parent || parent.deleted) throw new Error('The source item is in the trash.');
+        for (const key of keys) {
+          const annotation = z.Items.getByLibraryAndKey(item.libraryID, key);
+          if (!annotation || annotation.deleted || !annotation.isAnnotation() || annotation.parentID !== item.id
+            || !['text', 'note'].includes(annotation.annotationType || '')
+            || !annotation.annotationPageLabel?.trim() || !annotation.annotationComment?.trim()) continue;
+          citationHints.push({annotationKey: key, source: {libraryID: parent.libraryID, key: parent.key},
+            page: annotation.annotationPageLabel, comment: source.parse(annotation.annotationComment).body.textContent || ''});
+        }
       }
-      return {attachment: {libraryID: item.libraryID, key: item.key}, annotationKeys: new Set(keys)};
+      return {attachment: {libraryID: item.libraryID, key: item.key}, annotationKeys: new Set(keys), citationHints};
     },
     async ceiling() {
       const rows = await z.DB.queryAsync<{ceiling: number | null}>('SELECT MAX(itemID) AS ceiling FROM itemNotes');
       return rows[0]?.ceiling || 0;
     },
-    rows(after, ceiling, limit) { return z.DB.queryAsync<NoteRow>(BATCH_SQL, [after, ceiling, '%data-annotation%', '%zotero:%', limit]); },
+    rows(after, ceiling, limit) { return z.DB.queryAsync<NoteRow>(BATCH_SQL, [after, ceiling, '%data-annotation%', '%zotero:%', '%data-citation%', limit]); },
     async note(id): Promise<NoteInfo | null> {
       if (!await liveNote(id) || !z.Items.exists(id)) return null;
       const note = await z.Items.getAsync(id);
