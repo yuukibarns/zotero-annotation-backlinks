@@ -1,0 +1,32 @@
+name: Verify and build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - run: npm run check
+      - run: npm run bench
+      - uses: actions/upload-artifact@v4
+        with:
+          name: annotation-backlinks-beta
+          include-hidden-files: true
+          path: |
+            dist/*.xpi
+            dist/*.sha256
+            dist/updates.json
+            .test-output/benchmark.json
